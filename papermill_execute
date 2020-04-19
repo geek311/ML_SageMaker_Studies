@@ -1,0 +1,56 @@
+import papermill as pm, json, boto3, time, os
+
+start = time.time()
+pipeline_name = "Prod GoPS"
+client = boto3.client('sns')
+try:
+    message = "Pipeline: {} Executing Data Processing Script".format(pipeline_name)
+    subject = "[{} Executing Data Processing ".format(pipeline_name)
+    print(message, subject)
+    response = client.publish(
+        TargetArn='arn:aws:sns:us-east-1:005484526251:gops-prod-pulse-survey-sagemaker-state',
+        Message=message,
+        Subject=subject,
+        MessageStructure='string'
+    )
+    pm.execute_notebook(
+       '/home/ec2-user/SageMaker/Pulse_Survey_Dashboard_Data.ipynb',
+       '/home/ec2-user/SageMaker/Pulse_Survey_Dashboard_Data_executed.ipynb',
+        kernel_name='python3'
+    )
+    
+    tmp = '/home/ec2-user/SageMaker/.tmp'
+
+    try:
+        for filename in os.listdir(tmp):
+            file_path = os.path.join(tmp, filename)
+
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+    except Exception as e:
+        message = 'Failed to empty .tmp/. {}'.format(str(e))
+        print(message)
+    
+    completion_time = str((time.time() - start)/60)
+    print(completion_time)
+    message = "{} pipeline completed in {} minutes".format(pipeline_name,completion_time)
+    subject = "[{}] Completed".format(pipeline_name)
+    response = client.publish(
+        TargetArn='arn:aws:sns:us-east-1:005484526251:gops-prod-pulse-survey-sagemaker-success',
+        Message=message,
+        Subject=subject,
+        MessageStructure='string'
+    )
+except Exception as e:
+    message = "{} pipeline failed with error: {}".format(pipeline_name, str(e))
+    print(message)
+    subject = "[{}] Failed".format(pipeline_name)
+    response = client.publish(
+        TargetArn='arn:aws:sns:us-east-1:005484526251:gops-prod-pulse-survey-sagemaker-failure',
+        Message=message,
+        Subject=subject,
+        MessageStructure='string'
+    )
+    raise
